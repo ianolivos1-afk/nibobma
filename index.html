@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Americano - Personalizable 2026</title>
+    <style>
+        body { background: #1a1a1a; color: #fff; text-align: center; font-family: 'Arial Black', sans-serif; margin: 0; }
+        canvas { background: #2e7d32; border: 5px solid #fff; box-shadow: 0 0 20px #000; margin-top: 10px; }
+        .menu { margin: 10px; background: #333; padding: 15px; border-radius: 10px; display: inline-block; }
+        .btn { padding: 12px 25px; background: #ccff00; border: none; font-weight: bold; cursor: pointer; margin: 5px; border-radius: 5px; color: #000; transition: 0.3s; }
+        .btn:hover { background: #fff; transform: scale(1.05); }
+        .info { color: #aaa; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <h1>🏈 AMERICANO: MODO EDITOR 🏈</h1>
+    <div class="menu">
+        <button class="btn" onclick="iniciar(false)">VS BOT 🤖</button>
+        <button class="btn" onclick="iniciar(true)">VS AMIGO 👥</button>
+        <p class="info">P1: WASD + Q | P2: Flechas + M</p>
+    </div>
+    <br>
+    <canvas id="c" width="800" height="400"></canvas>
+
+    <script>
+        // ==========================================
+        //   ⚙️ SECCIÓN DE CONFIGURACIÓN (CÁMBIALO AQUÍ)
+        // ==========================================
+        const CONFIG = {
+            puntosParaGanar: 7,
+            velocidadJugador: 5,
+            velocidadBot: 4.5,
+            fuerzaLanzamiento: 16,
+            fuerzaTacleada: 50,      // Qué tanto empuja al robar
+            tiempoInmune: 60,       // Tiempo sin poder robar tras tacleada
+            colorP1: "#007bff",     // Azul
+            colorP2: "#dc3545",     // Rojo
+            colorOvoide: "#8B4513"  // Café
+        };
+
+        // ==========================================
+        //   🚀 LÓGICA DEL JUEGO (NO TOCAR SI NO SABES)
+        // ==========================================
+        const canvas = document.getElementById("c");
+        const ctx = canvas.getContext("2d");
+        
+        let p1 = {x:80, y:185, score:0, ball:false, color: CONFIG.colorP1, timer: 0};
+        let p2 = {x:690, y:185, score:0, ball:false, color: CONFIG.colorP2, timer: 0};
+        let ball = {x:400, y:200, dx:0, dy:0, lastOwner: null};
+        let activo = false, multi = false, estaEnPausa = false;
+        let gameOver = false, ganador = "", frameActivo = false;
+        let keys = {};
+
+        window.addEventListener("keydown", (e) => { 
+            keys[e.key.toLowerCase()] = true;
+            if([" ", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(e.key.toLowerCase())) e.preventDefault();
+        });
+        window.addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
+
+        function iniciar(m) { 
+            multi = m; activo = true; gameOver = false;
+            p1.score = 0; p2.score = 0;
+            reset(); 
+            if (!frameActivo) { frameActivo = true; loop(); }
+        }
+
+        function reset() {
+            if (p1.score >= CONFIG.puntosParaGanar) { finalPartida("AZUL"); return; }
+            if (p2.score >= CONFIG.puntosParaGanar) { finalPartida("ROJO"); return; }
+            
+            estaEnPausa = true;
+            p1.x = 80; p1.y = 185; p1.ball = false; p1.timer = 50;
+            p2.x = 690; p2.y = 185; p2.ball = false; p2.timer = 50;
+            ball.x = 400; ball.y = 200; ball.dx = 0; ball.dy = 0;
+            
+            setTimeout(() => { estaEnPausa = false; }, 1000);
+        }
+
+        function finalPartida(color) { gameOver = true; ganador = color; }
+
+        function marcarPunto(jugador) {
+            if (estaEnPausa || gameOver) return;
+            if (jugador === 1) p1.score++; else p2.score++;
+            reset();
+        }
+
+        function loop() {
+            ctx.fillStyle = "#2e7d32"; ctx.fillRect(0,0,800,400);
+            
+            // Líneas decorativas
+            ctx.strokeStyle = "rgba(255,255,255,0.2)";
+            for(let i=0; i<=800; i+=80) { ctx.strokeRect(i,0,1,400); }
+            ctx.fillStyle = "rgba(0,0,255,0.2)"; ctx.fillRect(740,0,60,400);
+            ctx.fillStyle = "rgba(255,0,0,0.2)"; ctx.fillRect(0,0,60,400);
+
+            if(activo && !gameOver) {
+                if (!estaEnPausa) {
+                    if(p1.timer > 0) p1.timer--;
+                    if(p2.timer > 0) p2.timer--;
+
+                    // Movimiento P1
+                    if(keys['w'] && p1.y > 0) p1.y -= CONFIG.velocidadJugador;
+                    if(keys['s'] && p1.y < 370) p1.y += CONFIG.velocidadJugador;
+                    if(keys['a'] && p1.x > 0) p1.x -= CONFIG.velocidadJugador;
+                    if(keys['d'] && p1.x < 770) p1.x += CONFIG.velocidadJugador;
+
+                    // LÓGICA BOT / P2
+                    if(multi) {
+                        if(keys['arrowup'] && p2.y > 0) p2.y -= CONFIG.velocidadJugador;
+                        if(keys['arrowdown'] && p2.y < 370) p2.y += CONFIG.velocidadJugador;
+                        if(keys['arrowleft'] && p2.x > 0) p2.x -= CONFIG.velocidadJugador;
+                        if(keys['arrowright'] && p2.x < 770) p2.x += CONFIG.velocidadJugador;
+                    } else {
+                        // IA mejorada sin trabas
+                        if (p2.ball) {
+                            p2.x -= CONFIG.velocidadBot;
+                            if (Math.abs(p2.y - p1.y) < 50 && p2.x > p1.x) {
+                                if (p2.y > 200) p2.y -= 3; else p2.y += 3;
+                            }
+                        } else {
+                            let tx = p1.ball ? p1.x : ball.x;
+                            let ty = p1.ball ? p1.y : ball.y;
+                            if (p2.x < tx) p2.x += CONFIG.velocidadBot;
+                            if (p2.x > tx) p2.x -= CONFIG.velocidadBot;
+                            if (p2.y < ty) p2.y += CONFIG.velocidadBot;
+                            if (p2.y > ty) p2.y -= CONFIG.velocidadBot;
+                        }
+                    }
+
+                    // Lanzamiento
+                    if(keys['q'] && p1.ball) { p1.ball=false; ball.dx=CONFIG.fuerzaLanzamiento; p1.timer=40; ball.lastOwner=1; }
+                    if(keys['m'] && p2.ball) { p2.ball=false; ball.dx=-CONFIG.fuerzaLanzamiento; p2.timer=40; ball.lastOwner=2; }
+
+                    // Sistema de Tacleada
+                    let dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+                    if(dist < 35) {
+                        if(p1.ball && p2.timer === 0) { 
+                            p1.ball = false; p2.ball = true; p1.timer = CONFIG.tiempoInmune; 
+                            p1.x -= CONFIG.fuerzaTacleada;
+                        } 
+                        else if(p2.ball && p1.timer === 0) { 
+                            p2.ball = false; p1.ball = true; p2.timer = CONFIG.tiempoInmune; 
+                            p2.x += CONFIG.fuerzaTacleada;
+                        }
+                    }
+
+                    // Balón
+                    if(!p1.ball && !p2.ball) {
+                        ball.x += ball.dx; ball.dx *= 0.98;
+                        if(ball.x < 10 || ball.x > 790) ball.dx *= -0.5;
+                        if(p1.timer === 0 && Math.hypot(p1.x+15-ball.x, p1.y+15-ball.y) < 30) { p1.ball=true; ball.dx=0; ball.lastOwner=1; }
+                        if(p2.timer === 0 && Math.hypot(p2.x+15-ball.x, p2.y+15-ball.y) < 30) { p2.ball=true; ball.dx=0; ball.lastOwner=2; }
+                        if(ball.x > 760 && ball.lastOwner === 1) marcarPunto(1);
+                        if(ball.x < 40 && ball.lastOwner === 2) marcarPunto(2);
+                    } else {
+                        if(p1.ball) { ball.x = p1.x+15; ball.y = p1.y+15; if(p1.x > 740) marcarPunto(1); }
+                        if(p2.ball) { ball.x = p2.x+15; ball.y = p2.y+15; if(p2.x < 30) marcarPunto(2); }
+                    }
+                }
+
+                // Dibujar
+                ctx.fillStyle = p1.color; ctx.fillRect(p1.x, p1.y, 30, 30);
+                ctx.fillStyle = p2.color; ctx.fillRect(p2.x, p2.y, 30, 30);
+                ctx.fillStyle = CONFIG.colorOvoide;
+                ctx.beginPath(); ctx.ellipse(ball.x, ball.y, 12, 8, ball.dx*0.05, 0, Math.PI*2); ctx.fill();
+
+                if(estaEnPausa) {
+                    ctx.fillStyle = "yellow"; ctx.font = "bold 40px Arial";
+                    ctx.textAlign = "center"; ctx.fillText("¡PREPARADOS!", 400, 200);
+                }
+            }
+
+            if(gameOver) {
+                ctx.fillStyle = "rgba(0,0,0,0.8)"; ctx.fillRect(0,0,800,400);
+                ctx.fillStyle = "white"; ctx.font = "bold 50px Arial";
+                ctx.textAlign = "center"; ctx.fillText("GANADOR: " + ganador, 400, 200);
+            }
+
+            ctx.fillStyle = "white"; ctx.font = "bold 25px Arial";
+            ctx.textAlign = "center"; ctx.fillText(p1.score + " - " + p2.score, 400, 40);
+            requestAnimationFrame(loop);
+        }
+    </script>
+</body>
+</html>
